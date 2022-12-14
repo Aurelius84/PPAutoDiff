@@ -1,9 +1,58 @@
 import paddle
 import torch
 import numpy
+import yaml
+from functools import partial
 from .report import Report, report_guard, print_report, current_report
+import os.path as osp
 
-def autodiff(layer, module, example_inp, options={}): 
+
+
+def _assign_weight(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param, np_value):
+
+    def _do_assign(param, np_value, type="paddle"): 
+        assert list(param.shape) == list(np_value.shape), ("Shape is not the same. {} vs {} \n"
+                    "Hint: \n"
+                    "      1. check whether your paddle model definition and torch model definition are corresponding.\n"
+                    "      2. check the weight shape of paddle:`{}` and torch:`{}` is the same.\n"
+                    ).format(param.shape, np_value.shape, paddle_sublayer, torch_submodule)
+        if type == "paddle":
+            paddle.assign(np_value, param)
+        elif type == "torch":
+            param.data = torch.as_tensor(np_value).type(param.dtype)
+        else: 
+            raise RuntimeError("Invalid Arguments, type must be one of ['paddle', 'torch'].")
+
+    yaml_path = osp.join(osp.dirname(__file__), "configs", "assign_weight.yaml")
+    assign_config = yaml.safe_load(open(yaml_path, "r"))
+    config = assign_config[paddle_sublayer.__class__.__name__]
+    assert torch_submodule.__class__.__name__ == config['torch'], "Not correspond, check your __init__ to make sure every sublayer is corresponded."
+    if param_name not in config['param']: 
+        _do_assign(paddle_param, np_value, "paddle")
+        _do_assign(torch_param, np_value, "torch")
+    else: 
+        """
+        TODO: has more options? make it more elegant, remove the if-elif by MethodClass.
+        """
+        if config['param'][param_name] == "transpose": 
+            _do_assign(paddle_param, np_value, "paddle")
+            _do_assign(torch_param, numpy.transpose(np_value), "torch")
+
+
+def _auto_fill_weight(layer, module): 
+    """
+    Automatically fill weights by randn.
+    """
+    for paddle_sublayer, torch_submodule in zip(layer.sublayers(True), module.modules()): 
+        for (name, paddle_param), torch_param in zip(paddle_sublayer.named_parameters("",False), torch_submodule.parameters(False)): 
+            shape = paddle_param.shape
+            rand_value = paddle.randn(shape).numpy()
+            _assign_weight(
+                 paddle_sublayer, torch_submodule,
+                 name, paddle_param, torch_param, rand_value)
+
+
+def autodiff(layer, module, example_inp, auto_weights=True, options={}): 
     """
     Given example inputs, automatically find the first layer with precision diff.
 
@@ -11,10 +60,10 @@ def autodiff(layer, module, example_inp, options={}):
         layer (paddle.nn.Layer): 
         module (torch.nn.Module): 
         example_inp (numpy.array):
+        auto_weights (boolean, optional):
         options (dict, optional):
     Returns:
         None
-
     """
     assert isinstance(layer, paddle.nn.Layer), "Invalid Argument."
     assert isinstance(module, torch.nn.Module), "Invalid Argument."
@@ -22,6 +71,9 @@ def autodiff(layer, module, example_inp, options={}):
 
     paddle.set_device('cpu')
     module = module.cpu()
+
+    if auto_weights: 
+        _auto_fill_weight(layer, module)
 
     torch_report = Report("torch")
     paddle_report = Report("paddle")
@@ -43,22 +95,21 @@ def autodiff(layer, module, example_inp, options={}):
 
 
 def _register_paddle_hooker(layer):
-    # paddle and torch have the static polymorphism, share the same code. may be differ later.
-    def hook(module, input, output):
+    def hook(module, input, output, idx):
         rep = current_report()
-        rep.put_item(input, output, module)
+        rep.put_item(input, output, module, idx)
         return None
 
-    for mod in layer.sublayers(True): 
-        mod.register_forward_post_hook(hook)
+    for idx, mod in enumerate(layer.sublayers(True)): 
+        mod.register_forward_post_hook(partial(hook, idx=idx))
     
 
 def _register_torch_hooker(module):
-    def hook(module, input, output):
+    def hook(module, input, output, idx):
         rep = current_report()
-        rep.put_item(input, output, module)
+        rep.put_item(input, output, module, idx)
         return None
 
-    for mod in module.modules(): 
-        mod.register_forward_hook(hook)
+    for idx, mod in enumerate(module.modules()): 
+        mod.register_forward_hook(partial(hook, idx=idx))
 
