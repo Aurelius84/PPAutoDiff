@@ -1,57 +1,14 @@
 import paddle
 import torch
 import numpy
-import yaml
 from functools import partial
-from .report import Report, report_guard, print_report, current_report
-import os.path as osp
+from .report import Report, report_guard, check_forward_and_backward, current_report
 import contextlib
-
-
-
-def _assign_weight(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param, np_value):
-
-    def _do_assign(param, np_value, type="paddle"): 
-        assert list(param.shape) == list(np_value.shape), ("Shape is not the same. {} vs {} \n"
-                    "Hint: \n"
-                    "      1. check whether your paddle model definition and torch model definition are corresponding.\n"
-                    "      2. check the weight shape of paddle:`{}` and torch:`{}` is the same.\n"
-                    ).format(param.shape, np_value.shape, paddle_sublayer, torch_submodule)
-        if type == "paddle":
-            paddle.assign(np_value, param)
-        elif type == "torch":
-            param.data = torch.as_tensor(np_value).type(param.dtype)
-        else: 
-            raise RuntimeError("Invalid Arguments, type must be one of ['paddle', 'torch'].")
-
-    yaml_path = osp.join(osp.dirname(__file__), "configs", "assign_weight.yaml")
-    assign_config = yaml.safe_load(open(yaml_path, "r"))
-    config = assign_config[paddle_sublayer.__class__.__name__]
-    assert torch_submodule.__class__.__name__ == config['torch'], "Not correspond, check your __init__ to make sure every sublayer is corresponded."
-    if param_name not in config['param']: 
-        _do_assign(paddle_param, np_value, "paddle")
-        _do_assign(torch_param, np_value, "torch")
-    else: 
-        """
-        TODO: has more options? make it more elegant, remove the if-elif by MethodClass.
-        """
-        if config['param'][param_name] == "transpose": 
-            _do_assign(paddle_param, np_value, "paddle")
-            _do_assign(torch_param, numpy.transpose(np_value), "torch")
-
-
-def _auto_fill_weight(layer, module): 
-    """
-    Automatically fill weights by randn.
-    """
-    for paddle_sublayer, torch_submodule in zip(layer.sublayers(True), module.modules()): 
-        for (name, paddle_param), torch_param in zip(paddle_sublayer.named_parameters("",False), torch_submodule.parameters(False)): 
-            shape = paddle_param.shape
-            rand_value = paddle.randn(shape).numpy()
-            _assign_weight(
-                 paddle_sublayer, torch_submodule,
-                 name, paddle_param, torch_param, rand_value)
-
+from paddle.fluid.layers.utils import flatten, to_sequence, map_structure, pack_sequence_as
+from .weights import map_for_each_weight, _assign_weight, _check_weight_grad
+from .utils import for_each_grad_tensor
+from .stack_extractor import *
+import traceback
 
 def autodiff(layer, module, example_inp, auto_weights=True, options={}): 
     """
@@ -64,7 +21,7 @@ def autodiff(layer, module, example_inp, auto_weights=True, options={}):
         auto_weights (boolean, optional):
         options (dict, optional):
     Returns:
-        paddle_output, torch_output
+        True for success, False for failed.
     """
     assert isinstance(layer, paddle.nn.Layer), "Invalid Argument."
     assert isinstance(module, torch.nn.Module), "Invalid Argument."
@@ -74,33 +31,52 @@ def autodiff(layer, module, example_inp, auto_weights=True, options={}):
     module = module.cpu()
 
     if auto_weights: 
-        _auto_fill_weight(layer, module)
+        map_for_each_weight(_assign_weight, layer, module)
 
     torch_report = Report("torch")
     paddle_report = Report("paddle")
     with report_guard(torch_report): 
         with _register_torch_hooker(module): 
             try: 
-                torch_output = module(torch.as_tensor(example_inp))
+                torch_input = torch.as_tensor(example_inp)
+                torch_input.requires_grad=True
+                torch_output = module(torch_input)
+                loss = torch_output.mean()
+                loss.backward()
             except Exception as e: 
                 raise RuntimeError("Exception is thrown while running forward of torch_module, please check the legality of module.\n{}".format(str(e)))
 
     with report_guard(paddle_report): 
         with _register_paddle_hooker(layer):
             try: 
-                paddle_output = layer(paddle.to_tensor(example_inp))
+                paddle_input = paddle.to_tensor(example_inp)
+                paddle_input.stop_gradient=False
+                paddle_output = layer(paddle_input)
+                loss = paddle_output.mean()
+                loss.backward()
             except Exception as e: 
                 raise RuntimeError("Exception is thrown while running forward of paddle_layer, please check the legality of layer.\n{}".format(str(e)))
 
-    print_report(torch_report, paddle_report, options)
-    return paddle_output, torch_output
+    map_for_each_weight(_check_weight_grad, layer, module)
+
+    ret = check_forward_and_backward(torch_report, paddle_report, options)
+    return ret 
 
 
 @contextlib.contextmanager
 def _register_paddle_hooker(layer):
+    def tensor_hook(x_grad, bwd_item, nth_tensor):
+        bwd_item.set_input_grads(nth_tensor, x_grad)
+        return x_grad
+        
     def hook(module, input, output, idx):
         rep = current_report()
-        rep.put_item(input, output, module, idx)
+        frame_info = extract_caller_information()
+        fwd_item = rep.put_item('forward', input, output, module, idx, frame_info)
+        bwd_item = rep.put_item('backward', input, output, module, idx, frame_info)
+        bwd_item.set_forward(fwd_item)
+        for i, (t,) in enumerate(for_each_grad_tensor(input)): 
+            t.register_hook(partial(tensor_hook, bwd_item=bwd_item, nth_tensor=i))
         return None
 
     remove_handles = []
@@ -115,9 +91,18 @@ def _register_paddle_hooker(layer):
     
 @contextlib.contextmanager
 def _register_torch_hooker(module):
+    def tensor_hook(x_grad, bwd_item, nth_tensor):
+        bwd_item.set_input_grads(nth_tensor, x_grad)
+        return x_grad
+        
     def hook(module, input, output, idx):
         rep = current_report()
-        rep.put_item(input, output, module, idx)
+        frame_info = extract_caller_information()
+        fwd_item = rep.put_item('forward', input, output, module, idx, frame_info)
+        bwd_item = rep.put_item('backward', input, output, module, idx, frame_info)
+        bwd_item.set_forward(fwd_item)
+        for i, (t,) in enumerate(for_each_grad_tensor(input)): 
+            t.register_hook(partial(tensor_hook, bwd_item=bwd_item, nth_tensor=i))
         return None
 
     remove_handles = []

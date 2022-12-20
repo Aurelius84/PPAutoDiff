@@ -1,4 +1,5 @@
 import numpy as np
+from .utils import is_tensor
 
 class ActionPool: 
     def __init__(self):
@@ -47,4 +48,11 @@ class EqualAction(Action):
         NOTE:
         """
         atol = cfg.get("atol", 1e-7)
-        np.testing.assert_allclose(torch_item.output.detach().numpy(), paddle_item.output.numpy(), atol=atol)
+        torch_tensors = torch_item.compare_tensors()
+        paddle_tensors = paddle_item.compare_tensors()
+        for (tt,), (pt,) in zip(torch_tensors, paddle_tensors): 
+            np.testing.assert_allclose(
+                tt.detach().numpy(), 
+                pt.numpy(), 
+                atol=atol)
+

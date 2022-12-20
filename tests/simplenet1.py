@@ -2,7 +2,7 @@ from PPAutoDiff import autodiff
 import torch
 import paddle
 import numpy
-
+import unittest
 
 class SimpleLayer(paddle.nn.Layer): 
     def __init__(self):
@@ -44,11 +44,20 @@ class SimpleModule(torch.nn.Module):
         x = self.linear2(x)
         return x
 
-def main():
-    layer = SimpleLayer()
-    module = SimpleModule()
-    inp = paddle.rand((100, 100)).numpy().astype("float32")
-    autodiff(layer, module, inp, auto_weights=True)
-    
+
+class TestCaseName(unittest.TestCase):
+    def test_success(self):
+        layer = SimpleLayer()
+        module = SimpleModule()
+        inp = paddle.rand((100, 100)).numpy().astype("float32")
+        assert autodiff(layer, module, inp, auto_weights=True) == True, "Failed. expected success."
+
+
+    def test_failed(self):
+        layer = SimpleLayer()
+        module = SimpleModule()
+        inp = paddle.rand((100, 100)).numpy().astype("float32")
+        assert autodiff(layer, module, inp, auto_weights=False) == False, "Success. expected failed."
+        
 if __name__ == "__main__":
-    main()
+    unittest.main()
