@@ -1,6 +1,7 @@
 import contextlib
 from collections import namedtuple
 from .actions import get_action
+import warnings
 
 class Counter: 
     def __init__(self):
@@ -58,11 +59,17 @@ class TableView:
         self.view = {}
         assert callable(key), "Key must be callable with a paramter: x -> key."
         for item in self.data:
-            assert key(item) not in self.view, "Fatal: duplicate key is found!"
+            if key(item) in self.view: 
+                warnings.warn("Warning: duplicate key is found, use list + pop strategy.")
+                self.view[key(item)] = [self.view[key(item)]]
+                self.view[key(item)].append(item)
             self.view[key(item)] = item
 
     def __getitem__(self, key):
         assert key in self.view, "{} is not found in index.".format(key)
+        if isinstance(self.view[key], list): 
+            ret = self.view[key].pop(0) # pop for sorting.
+            return ret
         return self.view[key]
 
     def __len__(self):

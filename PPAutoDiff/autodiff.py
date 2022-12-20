@@ -5,6 +5,7 @@ import yaml
 from functools import partial
 from .report import Report, report_guard, print_report, current_report
 import os.path as osp
+import contextlib
 
 
 
@@ -63,7 +64,7 @@ def autodiff(layer, module, example_inp, auto_weights=True, options={}):
         auto_weights (boolean, optional):
         options (dict, optional):
     Returns:
-        None
+        paddle_output, torch_output
     """
     assert isinstance(layer, paddle.nn.Layer), "Invalid Argument."
     assert isinstance(module, torch.nn.Module), "Invalid Argument."
@@ -78,38 +79,51 @@ def autodiff(layer, module, example_inp, auto_weights=True, options={}):
     torch_report = Report("torch")
     paddle_report = Report("paddle")
     with report_guard(torch_report): 
-        _register_torch_hooker(module)
-        try: 
-            torch_output = module(torch.as_tensor(example_inp))
-        except Exception as e: 
-            raise RuntimeError("Exception is thrown while running forward of torch_module, please check the legality of module.\n{}".format(str(e)))
+        with _register_torch_hooker(module): 
+            try: 
+                torch_output = module(torch.as_tensor(example_inp))
+            except Exception as e: 
+                raise RuntimeError("Exception is thrown while running forward of torch_module, please check the legality of module.\n{}".format(str(e)))
 
     with report_guard(paddle_report): 
-        _register_paddle_hooker(layer)
-        try: 
-            paddle_output = layer(paddle.to_tensor(example_inp))
-        except Exception as e: 
-            raise RuntimeError("Exception is thrown while running forward of paddle_layer, please check the legality of layer.\n{}".format(str(e)))
+        with _register_paddle_hooker(layer):
+            try: 
+                paddle_output = layer(paddle.to_tensor(example_inp))
+            except Exception as e: 
+                raise RuntimeError("Exception is thrown while running forward of paddle_layer, please check the legality of layer.\n{}".format(str(e)))
 
     print_report(torch_report, paddle_report, options)
+    return paddle_output, torch_output
 
 
+@contextlib.contextmanager
 def _register_paddle_hooker(layer):
     def hook(module, input, output, idx):
         rep = current_report()
         rep.put_item(input, output, module, idx)
         return None
 
+    remove_handles = []
     for idx, mod in enumerate(layer.sublayers(True)): 
-        mod.register_forward_post_hook(partial(hook, idx=idx))
-    
+        handle = mod.register_forward_post_hook(partial(hook, idx=idx))
+        if remove_handles: 
+            remove_handles.append(handle)
+    yield
+    for h in remove_handles: 
+        h.remove()
 
+    
+@contextlib.contextmanager
 def _register_torch_hooker(module):
     def hook(module, input, output, idx):
         rep = current_report()
         rep.put_item(input, output, module, idx)
         return None
 
+    remove_handles = []
     for idx, mod in enumerate(module.modules()): 
-        mod.register_forward_hook(partial(hook, idx=idx))
-
+        handle = mod.register_forward_hook(partial(hook, idx=idx))
+        remove_handles.append(handle)
+    yield
+    for h in remove_handles: 
+        h.remove()
