@@ -18,7 +18,7 @@ def _is_system_package(filename):
 def print_frame_summary(f):
     print ("File {}: {}\n        {}".format(f.filename, f.lineno, f.line))
 
-def extract_caller_information(): 
+def extract_frame_summary(): 
     """
     extract the current call stack by traceback module.
     gather the call information and put them into ReportItem to helper locate the error.

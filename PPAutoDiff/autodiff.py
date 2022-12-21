@@ -7,7 +7,7 @@ import contextlib
 from paddle.fluid.layers.utils import flatten, to_sequence, map_structure, pack_sequence_as
 from .weights import map_for_each_weight, _assign_weight, _check_weight_grad
 from .utils import for_each_grad_tensor
-from .stack_extractor import *
+from .stack_info import *
 import traceback
 
 def autodiff(layer, module, example_inp, auto_weights=True, options={}): 
@@ -71,7 +71,7 @@ def _register_paddle_hooker(layer):
         
     def hook(module, input, output, idx):
         rep = current_report()
-        frame_info = extract_caller_information()
+        frame_info = extract_frame_summary()
         fwd_item = rep.put_item('forward', input, output, module, idx, frame_info)
         bwd_item = rep.put_item('backward', input, output, module, idx, frame_info)
         bwd_item.set_forward(fwd_item)
@@ -97,7 +97,7 @@ def _register_torch_hooker(module):
         
     def hook(module, input, output, idx):
         rep = current_report()
-        frame_info = extract_caller_information()
+        frame_info = extract_frame_summary()
         fwd_item = rep.put_item('forward', input, output, module, idx, frame_info)
         bwd_item = rep.put_item('backward', input, output, module, idx, frame_info)
         bwd_item.set_forward(fwd_item)
