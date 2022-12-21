@@ -151,9 +151,9 @@ def current_report():
 def print_info(paddle_item, torch_item, exc, grad=False): 
     print ("FAILED !!!")
     if grad: 
-        print ("Diff found in `Backward Phrase`.")
+        print ("Diff found in `Backward Phase`.")
     else:   
-        print ("Diff found in `Forward Phrase`.")
+        print ("Diff found in `Forward Phase`.")
     print ("    File {}: {}   {}\n        {}".format(
         paddle_item.frame_info.filename, 
         paddle_item.frame_info.lineno,
