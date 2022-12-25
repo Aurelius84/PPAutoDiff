@@ -23,7 +23,7 @@ def print_frames(fs, indent=8):
     for f in fs: 
         print_frame(f, indent)
 
-def extract_caller_information(): 
+def extract_frame_summary(): 
     """
     extract the current call stack by traceback module.
     gather the call information and put them into ReportItem to helper locate the error.

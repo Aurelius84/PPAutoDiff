@@ -139,19 +139,12 @@ def print_info(paddle_item, torch_item, exc, step_idx, grad=False):
     print ("    Type of layer is  : {} vs {}".format(type(torch_item.net), type(paddle_item.net)))
     print (str(exc))
 
-    #print ("    File {}: {}   {}\n        {}".format(
-        #paddle_item.frame_info.filename, 
-        #paddle_item.frame_info.lineno,
-        #paddle_item.frame_info.name,
-
     print ("\n\nPaddle Stacks:" )
     print ("=========================")
     paddle_item.print_stacks()
     print ("Torch  Stacks:" )
     print ("=========================")
     torch_item.print_stacks()
-    #import pdb
-    #pdb.set_trace() 
 
 
 def check_forward_and_backward(torch_rep, paddle_rep, cfg):

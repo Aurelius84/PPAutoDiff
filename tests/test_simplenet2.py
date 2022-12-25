@@ -2,6 +2,7 @@ from PPAutoDiff import autodiff
 import torch
 import paddle
 import numpy
+import unittest
 
 """
 测试 不同的 `forward顺序`，但是具有同样的 `定义顺序`
@@ -32,11 +33,13 @@ class SimpleModule(torch.nn.Module):
         x1 = self.linear1(x)
         return x2 + x1
 
-def main():
-    layer = SimpleLayer()
-    module = SimpleModule()
-    inp = paddle.rand((100, 100)).numpy().astype("float32")
-    autodiff(layer, module, inp, auto_weights=True)
-    
+class TestCase(unittest.TestCase):
+    def test_success(self):
+        layer = SimpleLayer()
+        module = SimpleModule()
+        inp = paddle.rand((100, 100)).numpy().astype("float32")
+        assert autodiff(layer, module, inp, auto_weights=True) == True, "Failed, expect success."
+
 if __name__ == "__main__":
-    main()
+    unittest.main()
+

@@ -7,7 +7,7 @@ import contextlib
 from paddle.fluid.layers.utils import flatten, to_sequence, map_structure, pack_sequence_as
 from .weights import assign_weight, remove_inplace, check_weight_grad
 from .utils import for_each_grad_tensor
-from .stack_extractor import *
+from .stack_info import *
 import traceback
 
 def autodiff(layer, module, example_inp, auto_weights=True, options={}): 
@@ -80,7 +80,6 @@ def layer_hook(module, input, output, idx):
 
 @contextlib.contextmanager
 def _register_paddle_hooker(layer):
-
     remove_handles = []
     # TODO(xiongkun): duplicate layer is not support, implement custom generator to support (different net_id is ok).
     for idx, mod in enumerate(layer.sublayers(True)): 
