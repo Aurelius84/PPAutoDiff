@@ -3,15 +3,7 @@ import torch
 import numpy
 import yaml
 import os.path as osp
-
-def map_for_each_weight(fn, layer, module): 
-    """
-    Automatically fill weights by randn.
-    """
-    for paddle_sublayer, torch_submodule in zip(layer.sublayers(True), module.modules()): 
-        for (name, paddle_param), torch_param in zip(paddle_sublayer.named_parameters("",False), torch_submodule.parameters(False)): 
-            fn(paddle_sublayer, torch_submodule, name, paddle_param, torch_param)
-
+from .utils import map_for_each_weight, map_for_each_sublayer
 
 def _assign_weight(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param):
 
@@ -22,7 +14,7 @@ def _assign_weight(paddle_sublayer, torch_submodule, param_name, paddle_param, t
                     "      2. check the weight shape of paddle:`{}` and torch:`{}` is the same.\n"
                     ).format(param.shape, np_value.shape, paddle_sublayer, torch_submodule)
         if type == "paddle":
-            paddle.assign(np_value, param)
+            paddle.assign(paddle.to_tensor(np_value), param)
         elif type == "torch":
             param.data = torch.as_tensor(np_value).type(param.dtype)
         else: 
@@ -32,9 +24,10 @@ def _assign_weight(paddle_sublayer, torch_submodule, param_name, paddle_param, t
     np_value = paddle.randn(shape).numpy()
     yaml_path = osp.join(osp.dirname(__file__), "configs", "assign_weight.yaml")
     assign_config = yaml.safe_load(open(yaml_path, "r"))
-    config = assign_config[paddle_sublayer.__class__.__name__]
-    assert torch_submodule.__class__.__name__ == config['torch'], "Not correspond, check your __init__ to make sure every sublayer is corresponded."
-    if param_name not in config['param']: 
+    config = assign_config.get(paddle_sublayer.__class__.__name__, None)
+    if config is not None: 
+        assert torch_submodule.__class__.__name__ == config['torch'], "Not correspond, check your __init__ to make sure every sublayer is corresponded."
+    if config is None or param_name not in config['param']: 
         _do_assign(paddle_param, np_value, "paddle")
         _do_assign(torch_param, np_value, "torch")
     else: 
@@ -46,7 +39,18 @@ def _assign_weight(paddle_sublayer, torch_submodule, param_name, paddle_param, t
             _do_assign(torch_param, numpy.transpose(np_value), "torch")
 
 
-def _check_weight_grad(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param): 
-    # TODO: add weigth compare function.
-    pass
+def check_weight_grad(layer, module):
+    def _check_weight_grad(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param): 
+        # TODO(zhanfei): add weigth compare function.
+        pass
+    map_for_each_weight(_check_weight_grad, layer, module)
 
+def assign_weight(layer, module):
+    map_for_each_weight(_assign_weight, layer, module)
+
+def remove_inplace(layer, module):
+    def _remove_inplace(layer, module):
+        if hasattr(module, "inplace"): 
+            module.inplace = False
+    map_for_each_sublayer(_remove_inplace, layer, module)
+    
