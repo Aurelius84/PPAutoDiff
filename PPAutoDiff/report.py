@@ -4,7 +4,7 @@ from .actions import get_action
 from paddle.fluid.layers.utils import flatten, to_sequence, map_structure, pack_sequence_as
 from .utils import for_each_grad_tensor, for_each_tensor, clone_tensors, TableView, TreeView
 import warnings
-from .stack_extractor import print_frames
+from .stack_info import print_frames
 
 class Counter: 
     def __init__(self):

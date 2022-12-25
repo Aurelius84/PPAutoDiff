@@ -70,7 +70,7 @@ def tensor_hook(x_grad, bwd_item, nth_tensor):
     
 def layer_hook(module, input, output, idx):
     rep = current_report()
-    frame_info, frames = extract_caller_information()
+    frame_info, frames = extract_frame_summary()
     fwd_item = rep.put_item('forward', input, output, module, idx, frame_info, frames)
     bwd_item = rep.put_item('backward', input, output, module, idx, frame_info, frames)
     bwd_item.set_forward(fwd_item)

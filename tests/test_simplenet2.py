@@ -38,7 +38,7 @@ class TestCase(unittest.TestCase):
         layer = SimpleLayer()
         module = SimpleModule()
         inp = paddle.rand((100, 100)).numpy().astype("float32")
-        assert autodiff(layer, module, inp, auto_weights=True) == True, "Failed, expect success."
+        assert autodiff(layer, module, inp, auto_weights=True, options={'atol': 1e-4}) == True, "Failed, expect success."
 
 if __name__ == "__main__":
     unittest.main()
