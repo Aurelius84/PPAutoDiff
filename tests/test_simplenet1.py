@@ -50,14 +50,14 @@ class TestCaseName(unittest.TestCase):
         layer = SimpleLayer()
         module = SimpleModule()
         inp = paddle.rand((100, 100)).numpy().astype("float32")
-        assert autodiff(layer, module, inp, auto_weights=True) == True, "Failed. expected success."
+        assert autodiff(layer, module, inp, auto_weights=True, options={'atol': 1e-4}) == True, "Failed. expected success."
 
 
     def test_failed(self):
         layer = SimpleLayer()
         module = SimpleModule()
         inp = paddle.rand((100, 100)).numpy().astype("float32")
-        assert autodiff(layer, module, inp, auto_weights=False) == False, "Success. expected failed."
+        assert autodiff(layer, module, inp, auto_weights=False, options={'atol': 1e-4}) == False, "Success. expected failed."
         
 if __name__ == "__main__":
     unittest.main()

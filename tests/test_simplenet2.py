@@ -5,7 +5,7 @@ import numpy
 import unittest
 
 """
-测试 同一个Module / Layer被多次forward
+测试 不同的 `forward顺序`，但是具有同样的 `定义顺序`
 
 期待结果：
 Success
@@ -19,9 +19,8 @@ class SimpleLayer(paddle.nn.Layer):
         
     def forward(self, x):
         x1 = self.linear1(x)
-        x2 = self.linear1(x)
-        x3 = self.linear2(x)
-        return x1 + x2 + x3
+        x2 = self.linear2(x)
+        return x1 + x2
 
 class SimpleModule(torch.nn.Module): 
     def __init__(self):
@@ -30,17 +29,17 @@ class SimpleModule(torch.nn.Module):
         self.linear2 = torch.nn.Linear(100, 100)    
         
     def forward(self, x):
+        x2 = self.linear2(x)
         x1 = self.linear1(x)
-        x2 = self.linear1(x)
-        x3 = self.linear2(x)
-        return x2 + x1 + x3
+        return x2 + x1
 
 class TestCase(unittest.TestCase):
     def test_success(self):
         layer = SimpleLayer()
         module = SimpleModule()
         inp = paddle.rand((100, 100)).numpy().astype("float32")
-        assert autodiff(layer, module, inp, auto_weights=True) == True, "Failed, expect success."
+        assert autodiff(layer, module, inp, auto_weights=True, options={'atol': 1e-4}) == True, "Failed, expect success."
 
 if __name__ == "__main__":
     unittest.main()
+
