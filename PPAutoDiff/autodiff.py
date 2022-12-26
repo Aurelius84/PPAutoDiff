@@ -84,8 +84,7 @@ def _register_paddle_hooker(layer):
     # TODO(xiongkun): duplicate layer is not support, implement custom generator to support (different net_id is ok).
     for idx, mod in enumerate(layer.sublayers(True)): 
         handle = mod.register_forward_post_hook(partial(layer_hook, idx=idx))
-        if remove_handles: 
-            remove_handles.append(handle)
+        remove_handles.append(handle)
     yield
     for h in remove_handles: 
         h.remove()
