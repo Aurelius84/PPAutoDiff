@@ -59,8 +59,9 @@ def autodiff(layer, module, example_inp, auto_weights=True, options={}):
     
     print ("Max output diff is {}".format(numpy.abs(paddle_output.numpy() - torch_output.detach().numpy()).max()))
 
-    check_weight_grad(layer, module)
+    weight_check, grad_check = check_weight_grad(layer, module, options)
     ret = check_forward_and_backward(torch_report, paddle_report, options)
+    ret = ret and weight_check and grad_check
     return ret 
 
 def tensor_hook(x_grad, bwd_item, nth_tensor):
