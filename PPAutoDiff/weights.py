@@ -7,9 +7,7 @@ from itertools import zip_longest
 from .utils import map_for_each_weight, map_for_each_sublayer
 
 
-def process_each_weight(process_name, layer, module, options=None):
-    if options is None:
-        options = {"atol": 1e-7}
+def process_each_weight(process_name, layer, module, options={}):
     yaml_path = osp.join(osp.dirname(__file__), "configs", "assign_weight.yaml")
     assign_yaml = yaml.safe_load(open(yaml_path, "r"))
 
