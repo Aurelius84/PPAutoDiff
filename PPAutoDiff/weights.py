@@ -9,6 +9,7 @@ from .utils import map_for_each_weight, map_for_each_sublayer
 _weight_check = True
 _grad_check = True
 
+
 @contextlib.contextmanager
 def weight_grad_check_guard():
     global _weight_check, _grad_check
@@ -19,6 +20,7 @@ def weight_grad_check_guard():
     yield
     _weight_check = old_weight_check
     _grad_check = old_grad_check
+
 
 def each_weight_fn_factory(fn_name, options=None):
     yaml_path = osp.join(osp.dirname(__file__), "configs", "assign_weight.yaml")
@@ -102,6 +104,7 @@ def each_weight_fn_factory(fn_name, options=None):
         raise RuntimeError("Invalid fn type, not such fn called `{}`".format(fn_name))
 
     return fn_family[fn_name]
+
 
 def assign_weight(layer, module):
     map_for_each_weight(each_weight_fn_factory('assign_weight'), layer, module)

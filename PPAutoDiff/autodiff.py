@@ -102,6 +102,6 @@ def _register_torch_hooker(module):
         h.remove()
 
 def _preprocess(layer, module, example_inp, auto_weights, options):
-    #remove_inplace(layer, module)
+    remove_inplace(layer, module)
     if auto_weights: 
         assign_weight(layer, module)
