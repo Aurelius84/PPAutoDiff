@@ -18,18 +18,17 @@ def process_each_weight(process_name, layer, module, options={}):
     def _process_runner(process, paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param, yamls):
         assign_config = yamls['assign_yaml'].get(paddle_sublayer.__class__.__name__, None)
         atol = options.get('atol', 1e-7)
+        settings = {'atol' : atol}
 
         if assign_config is not None:
             assert torch_submodule.__class__.__name__ == assign_config['torch'], "Not correspond, check your __init__ to make sure every sublayer is corresponded."
         if assign_config is None or param_name not in assign_config['param']:
-            process(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param, 
-                settings={'transpose':False, 'atol': atol}
-            )
+            settings['transpose'] = False
         else:
             if assign_config['param'][param_name] == "transpose": 
-                process(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param, 
-                    settings={'transpose':True, 'atol': atol}
-                )
+                settings['transpose'] = True
+
+        process(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param, settings)
 
     def _shape_check(paddle_sublayer, torch_submodule, param_name, paddle_param, torch_param, settings):
         p_shape = list(paddle_param.shape)
