@@ -71,7 +71,6 @@ def process_each_weight(process_name, layer, module, options={}):
                     "torch: at `{}`.\n"
                     .format(param_name, paddle_sublayer, torch_submodule))
 
-
         if not numpy.allclose(p_grad, t_grad, atol=settings['atol']):
             _grad_check = False 
             print("After training, grad value is different for param `{}`.\n"
