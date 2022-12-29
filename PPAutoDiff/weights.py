@@ -2,6 +2,9 @@ import paddle
 import torch
 import numpy
 import yaml
+import os
+import sys
+import shutil
 import os.path as osp
 from itertools import zip_longest
 from .utils import map_for_each_weight, map_for_each_sublayer
@@ -64,19 +67,25 @@ def process_each_weight(process_name, layer, module, options={}):
             t_param = numpy.transpose(t_param)
             t_grad = numpy.transpose(t_grad)
 
+        weight_log_path = os.path.join(sys.path[0], 'diff_log', 'weight_diff.log')
+        grad_log_path = os.path.join(sys.path[0], 'diff_log', 'grad_diff.log')
+
         if not numpy.allclose(p_param, t_param, atol=settings['atol']):
             _weight_check = False
-            print("After training, weight value is different for param `{}`.\n"
-                    "paddle: at `{}`.\n"
-                    "torch: at `{}`.\n"
-                    .format(param_name, paddle_sublayer, torch_submodule))
+            with open(weight_log_path, 'a') as f:
+                f.write("After training, weight value is different for param `{}`.\n"
+                        "paddle: `{}` with value:\n{}\n"
+                        "torch: `{}` with value:\n{}\n\n"
+                        .format(param_name, paddle_sublayer, p_param, torch_submodule, t_param))
+
 
         if not numpy.allclose(p_grad, t_grad, atol=settings['atol']):
             _grad_check = False 
-            print("After training, grad value is different for param `{}`.\n"
-                    "paddle: at `{}`.\n"
-                    "torch: at `{}`.\n"
-                    .format(param_name, paddle_sublayer, torch_submodule))
+            with open(grad_log_path, 'a') as f:
+                f.write("After training, grad value is different for param `{}`.\n"
+                        "paddle: `{}` with value\n{}\n"
+                        "torch: `{}` with value\n{}\n\n"
+                        .format(param_name, paddle_sublayer, p_grad, torch_submodule, t_grad))
 
     process_family = {
         'assign_weight' : _assign_weight,
@@ -86,11 +95,23 @@ def process_each_weight(process_name, layer, module, options={}):
     if process_name not in process_family.keys():
         raise RuntimeError("Invalid fn type, not such fn called `{}`".format(process_name))
 
+    diff_log_path = os.path.join(sys.path[0], 'diff_log')
+    if os.path.exists(diff_log_path):
+        shutil.rmtree(diff_log_path)
+    os.makedirs(diff_log_path)
+
     for paddle_sublayer, torch_submodule in zip_longest(layer.sublayers(True), module.modules(), fillvalue=None): 
         if paddle_sublayer is None or torch_submodule is None: 
             raise RuntimeError("Torch and Paddle return difference number of sublayers. Check your model.")
         for (name, paddle_param), torch_param in zip(paddle_sublayer.named_parameters("",False), torch_submodule.parameters(False)): 
             _process_runner(process_family[process_name], paddle_sublayer, torch_submodule, name, paddle_param, torch_param, yamls)
+
+    if not os.listdir(diff_log_path):
+        os.rmdir(diff_log_path)
+    else:
+        if process_name == 'check_weight_grad':
+            print("Differences in weight or grad !!!\n"
+                  "Check reports at `{}`\n".format(diff_log_path))
 
     if process_name == 'check_weight_grad':
         return _weight_check, _grad_check

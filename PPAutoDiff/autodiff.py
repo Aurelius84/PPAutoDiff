@@ -57,7 +57,7 @@ def autodiff(layer, module, example_inp, auto_weights=True, options={}):
             except Exception as e: 
                 raise RuntimeError("Exception is thrown while running forward of paddle_layer, please check the legality of layer.\n{}".format(str(e)))
     
-    print ("Max output diff is {}".format(numpy.abs(paddle_output.numpy() - torch_output.detach().numpy()).max()))
+    print ("Max output diff is {}\n".format(numpy.abs(paddle_output.numpy() - torch_output.detach().numpy()).max()))
 
     weight_check, grad_check = check_weight_grad(layer, module, options)
     ret = check_forward_and_backward(torch_report, paddle_report, options)
